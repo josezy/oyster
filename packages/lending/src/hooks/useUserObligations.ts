@@ -1,6 +1,7 @@
+import { hooks, TokenAccount } from '@oyster/common';
 import { useMemo } from 'react';
 import { useEnrichedLendingObligations } from './useEnrichedLendingObligations';
-import { TokenAccount, hooks } from '@oyster/common';
+
 const { useUserAccounts } = hooks;
 
 export function useUserObligations() {

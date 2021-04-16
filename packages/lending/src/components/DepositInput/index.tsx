@@ -1,19 +1,20 @@
-import React, { useCallback, useState } from 'react';
-import { InputType, useSliderInput, useUserBalance } from '../../hooks';
-import { LendingReserve } from '../../models/lending';
-import { Card, Slider } from 'antd';
-import { deposit } from '../../actions/deposit';
+import { ActionConfirmation, ConnectButton, contexts } from '@oyster/common';
 import { PublicKey } from '@solana/web3.js';
-import './style.less';
+import { Card, Slider } from 'antd';
+import React, { useCallback, useState } from 'react';
+import { depositReserveLiquidity } from '../../actions';
 import { LABELS, marks } from '../../constants';
+import { InputType, useSliderInput, useUserBalance } from '../../hooks';
+import { Reserve } from '../../models';
 import CollateralInput from '../CollateralInput';
-import { contexts, ConnectButton, ActionConfirmation } from '@oyster/common';
+import './style.less';
+
 const { useWallet } = contexts.Wallet;
 const { useConnection } = contexts.Connection;
 
 export const DepositInput = (props: {
   className?: string;
-  reserve: LendingReserve;
+  reserve: Reserve;
   address: PublicKey;
 }) => {
   const connection = useConnection();
@@ -25,7 +26,7 @@ export const DepositInput = (props: {
   const address = props.address;
 
   const { accounts: fromAccounts, balance, balanceLamports } = useUserBalance(
-    reserve?.liquidityMint,
+    reserve?.liquidity.mint,
   );
 
   const convert = useCallback(
@@ -46,7 +47,7 @@ export const DepositInput = (props: {
 
     (async () => {
       try {
-        await deposit(
+        await depositReserveLiquidity(
           fromAccounts[0],
           type === InputType.Percent
             ? (pct * balanceLamports) / 100

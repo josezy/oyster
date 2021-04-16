@@ -1,43 +1,42 @@
 import {
+  contexts,
+  createTokenAccount,
+  findOrCreateAccountByMint,
+  LENDING_PROGRAM_ID,
+  models,
+  notify,
+  ParsedAccount,
+  TOKEN_PROGRAM_ID,
+  TokenAccount,
+} from '@oyster/common';
+import { AccountLayout, NATIVE_MINT, Token } from '@solana/spl-token';
+import {
   Account,
   Connection,
   PublicKey,
   TransactionInstruction,
 } from '@solana/web3.js';
 import {
-  contexts,
-  utils,
-  actions,
-  models,
-  ParsedAccount,
-  TokenAccount,
-} from '@oyster/common';
+  Obligation,
+  refreshReserveInstruction,
+  repayObligationLiquidityInstruction,
+  Reserve,
+} from '../models';
 
-import {
-  accrueInterestInstruction,
-  LendingReserve,
-} from './../models/lending/reserve';
-import { repayInstruction } from './../models/lending/repay';
-import { AccountLayout, Token, NATIVE_MINT } from '@solana/spl-token';
-
-import { LendingObligation } from '../models';
 const { approve } = models;
-const { createTokenAccount, findOrCreateAccountByMint } = actions;
 const { sendTransaction } = contexts.Connection;
-const { LENDING_PROGRAM_ID, TOKEN_PROGRAM_ID, notify } = utils;
 
-export const repay = async (
+// @FIXME
+export const repayObligationLiquidity = async (
   from: TokenAccount,
   repayAmount: number,
 
   // which loan to repay
-  obligation: ParsedAccount<LendingObligation>,
+  obligation: ParsedAccount<Obligation>,
 
-  obligationToken: TokenAccount,
+  repayReserve: ParsedAccount<Reserve>,
 
-  repayReserve: ParsedAccount<LendingReserve>,
-
-  withdrawReserve: ParsedAccount<LendingReserve>,
+  withdrawReserve: ParsedAccount<Reserve>,
 
   connection: Connection,
   wallet: any,
@@ -57,7 +56,7 @@ export const repay = async (
     AccountLayout.span,
   );
 
-  const [authority] = await PublicKey.findProgramAddress(
+  const [lendingMarketAuthority] = await PublicKey.findProgramAddress(
     [repayReserve.info.lendingMarket.toBuffer()],
     LENDING_PROGRAM_ID,
   );
@@ -65,7 +64,7 @@ export const repay = async (
   let fromAccount = from.pubkey;
   if (
     wallet.publicKey.equals(fromAccount) &&
-    repayReserve.info.liquidityMint.equals(NATIVE_MINT)
+    repayReserve.info.liquidity.mint.equals(NATIVE_MINT)
   ) {
     fromAccount = createTokenAccount(
       instructions,
@@ -103,10 +102,11 @@ export const repay = async (
     instructions,
     cleanupInstructions,
     accountRentExempt,
-    withdrawReserve.info.collateralMint,
+    withdrawReserve.info.collateral.mint,
     signers,
   );
 
+  // @FIXME: obligation tokens
   // create approval for transfer transactions
   approve(
     instructions,
@@ -120,23 +120,20 @@ export const repay = async (
   );
 
   instructions.push(
-    accrueInterestInstruction(repayReserve.pubkey, withdrawReserve.pubkey),
+    // @FIXME: aggregator needed
+    refreshReserveInstruction(repayReserve.pubkey),
+    refreshReserveInstruction(withdrawReserve.pubkey),
   );
 
   instructions.push(
-    repayInstruction(
+    repayObligationLiquidityInstruction(
       repayAmount,
       fromAccount,
       toAccount,
       repayReserve.pubkey,
-      repayReserve.info.liquiditySupply,
-      withdrawReserve.pubkey,
-      withdrawReserve.info.collateralSupply,
       obligation.pubkey,
-      obligation.info.tokenMint,
-      obligationToken.pubkey,
       repayReserve.info.lendingMarket,
-      authority,
+      lendingMarketAuthority,
       transferAuthority.publicKey,
     ),
   );

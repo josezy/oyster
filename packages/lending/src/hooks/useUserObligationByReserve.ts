@@ -1,10 +1,10 @@
+import { PublicKey } from '@solana/web3.js';
 import { useMemo } from 'react';
 import { useUserObligations } from './useUserObligations';
-import { PublicKey } from '@solana/web3.js';
 
 export function useUserObligationByReserve(
   borrowReserve?: string | PublicKey,
-  collateralReserve?: string | PublicKey,
+  depositReserve?: string | PublicKey,
 ) {
   const { userObligations } = useUserObligations();
 
@@ -13,20 +13,22 @@ export function useUserObligationByReserve(
       typeof borrowReserve === 'string'
         ? borrowReserve
         : borrowReserve?.toBase58();
-    const collateralId =
-      typeof collateralReserve === 'string'
-        ? collateralReserve
-        : collateralReserve?.toBase58();
+    const depositId =
+      typeof depositReserve === 'string'
+        ? depositReserve
+        : depositReserve?.toBase58();
     return userObligations.filter(item =>
-      borrowId && collateralId
-        ? item.obligation.info.borrowReserve.toBase58() === borrowId &&
-          item.obligation.info.collateralReserve.toBase58() === collateralId
+      borrowId && depositId
+        ? item.obligation.info.borrows.borrowReserve.toBase58() === borrowId &&
+          item.obligation.info.deposits.depositReserve.toBase58() === depositId
         : (borrowId &&
-            item.obligation.info.borrowReserve.toBase58() === borrowId) ||
-          (collateralId &&
-            item.obligation.info.collateralReserve.toBase58() === collateralId),
+            item.obligation.info.borrows.borrowReserve.toBase58() ===
+              borrowId) ||
+          (depositId &&
+            item.obligation.info.deposits.depositReserve.toBase58() ===
+              depositId),
     );
-  }, [borrowReserve, collateralReserve, userObligations]);
+  }, [borrowReserve, depositReserve, userObligations]);
 
   return {
     userObligationsByReserve,

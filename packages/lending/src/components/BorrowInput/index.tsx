@@ -1,37 +1,34 @@
+import {
+  ActionConfirmation,
+  BackButton,
+  ConnectButton,
+  contexts,
+  ParsedAccount,
+} from '@oyster/common';
+import { Card } from 'antd';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+
+import { borrowObligationLiquidity } from '../../actions';
+import { LABELS } from '../../constants';
+import { useMidPriceInUSD } from '../../contexts/market';
 import {
   useSliderInput,
   useUserBalance,
   useUserDeposits,
   useUserObligationByReserve,
 } from '../../hooks';
-import {
-  BorrowAmountType,
-  LendingReserve,
-  LendingReserveParser,
-} from '../../models';
-import { Card } from 'antd';
-import {
-  contexts,
-  ParsedAccount,
-  ConnectButton,
-  BackButton,
-  ActionConfirmation,
-} from '@oyster/common';
-
-import { borrow } from '../../actions';
-import './style.less';
-import { LABELS } from '../../constants';
+import { BorrowAmountType, Reserve, ReserveParser } from '../../models';
 import CollateralInput from '../CollateralInput';
-import { useMidPriceInUSD } from '../../contexts/market';
 import { RiskSlider } from '../RiskSlider';
+import './style.less';
+
 const { useWallet } = contexts.Wallet;
 const { useConnection } = contexts.Connection;
 const { cache } = contexts.Accounts;
 
 export const BorrowInput = (props: {
   className?: string;
-  reserve: ParsedAccount<LendingReserve>;
+  reserve: ParsedAccount<Reserve>;
 }) => {
   const connection = useConnection();
   const { wallet } = useWallet();
@@ -42,26 +39,26 @@ export const BorrowInput = (props: {
 
   const borrowReserve = props.reserve;
 
-  const [collateralReserveKey, setCollateralReserveKey] = useState<string>();
+  const [depositReserveKey, setCollateralReserveKey] = useState<string>();
 
-  const collateralReserve = useMemo(() => {
+  const depositReserve = useMemo(() => {
     const id: string =
       cache
-        .byParser(LendingReserveParser)
-        .find(acc => acc === collateralReserveKey) || '';
+        .byParser(ReserveParser)
+        .find(acc => acc === depositReserveKey) || '';
 
-    return cache.get(id) as ParsedAccount<LendingReserve>;
-  }, [collateralReserveKey]);
+    return cache.get(id) as ParsedAccount<Reserve>;
+  }, [depositReserveKey]);
   const borrowPrice = useMidPriceInUSD(
-    borrowReserve.info.liquidityMint.toBase58(),
+    borrowReserve.info.liquidity.mint.toBase58(),
   ).price;
   const collateralPrice = useMidPriceInUSD(
-    collateralReserve?.info.liquidityMint.toBase58(),
+    depositReserve?.info.liquidity.mint.toBase58(),
   )?.price;
 
   const include = useMemo(
-    () => new Set([collateralReserve?.pubkey.toBase58()]),
-    [collateralReserve],
+    () => new Set([depositReserve?.pubkey.toBase58()]),
+    [depositReserve],
   );
 
   const exclude = useMemo(() => new Set([]), []);
@@ -84,7 +81,7 @@ export const BorrowInput = (props: {
   const { value, setValue, pct } = useSliderInput(convert);
 
   useEffect(() => {
-    if (collateralReserve && lastTyped === 'collateral') {
+    if (depositReserve && lastTyped === 'collateral') {
       const ltv = borrowReserve.info.config.loanToValueRatio / 100;
 
       if (collateralValue) {
@@ -98,7 +95,7 @@ export const BorrowInput = (props: {
     }
   }, [
     lastTyped,
-    collateralReserve,
+    depositReserve,
     collateralPrice,
     borrowPrice,
     borrowReserve,
@@ -107,7 +104,7 @@ export const BorrowInput = (props: {
   ]);
 
   useEffect(() => {
-    if (collateralReserve && lastTyped === 'borrow') {
+    if (depositReserve && lastTyped === 'borrow') {
       const ltv = borrowReserve.info.config.loanToValueRatio / 100;
 
       if (value) {
@@ -121,7 +118,7 @@ export const BorrowInput = (props: {
     }
   }, [
     lastTyped,
-    collateralReserve,
+    depositReserve,
     collateralPrice,
     borrowPrice,
     borrowReserve,
@@ -130,13 +127,13 @@ export const BorrowInput = (props: {
 
   const { userObligationsByReserve } = useUserObligationByReserve(
     borrowReserve?.pubkey,
-    collateralReserve?.pubkey,
+    depositReserve?.pubkey,
   );
   const { accounts: fromAccounts } = useUserBalance(
-    collateralReserve?.info.collateralMint,
+    depositReserve?.info.collateral.mint,
   );
   const onBorrow = useCallback(() => {
-    if (!collateralReserve) {
+    if (!depositReserve) {
       return;
     }
 
@@ -144,7 +141,7 @@ export const BorrowInput = (props: {
 
     (async () => {
       try {
-        await borrow(
+        await borrowObligationLiquidity(
           connection,
           wallet,
 
@@ -153,7 +150,7 @@ export const BorrowInput = (props: {
           // TODO: switch to collateral when user is using slider
           BorrowAmountType.LiquidityBorrowAmount,
           borrowReserve,
-          collateralReserve,
+          depositReserve,
 
           // TODO: select exsisting obligations by collateral reserve
           userObligationsByReserve.length > 0
@@ -179,7 +176,7 @@ export const BorrowInput = (props: {
     wallet,
     value,
     setValue,
-    collateralReserve,
+    depositReserve,
     borrowReserve,
     fromAccounts,
     userObligationsByReserve,

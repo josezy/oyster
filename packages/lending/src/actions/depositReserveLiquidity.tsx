@@ -1,20 +1,26 @@
 import {
+  actions,
+  contexts,
+  LENDING_PROGRAM_ID,
+  models,
+  notify,
+  TokenAccount,
+} from '@oyster/common';
+import { AccountLayout } from '@solana/spl-token';
+import {
   Account,
   Connection,
   PublicKey,
   TransactionInstruction,
 } from '@solana/web3.js';
-import { contexts, utils, models, actions, TokenAccount } from '@oyster/common';
 import {
-  accrueInterestInstruction,
-  depositInstruction,
+  depositReserveLiquidityInstruction,
   initReserveInstruction,
-  LendingReserve,
-} from './../models/lending';
-import { AccountLayout } from '@solana/spl-token';
+  refreshReserveInstruction,
+  Reserve,
+} from '../models';
 
 const { sendTransaction } = contexts.Connection;
-const { LENDING_PROGRAM_ID, notify } = utils;
 const {
   createUninitializedAccount,
   ensureSplAccount,
@@ -22,10 +28,11 @@ const {
 } = actions;
 const { approve } = models;
 
-export const deposit = async (
+// @FIXME
+export const depositReserveLiquidity = async (
   from: TokenAccount,
   amountLamports: number,
-  reserve: LendingReserve,
+  reserve: Reserve,
   reserveAddress: PublicKey,
   connection: Connection,
   wallet: any,
@@ -47,12 +54,12 @@ export const deposit = async (
     AccountLayout.span,
   );
 
-  const [authority] = await PublicKey.findProgramAddress(
+  const [lendingMarketAuthority] = await PublicKey.findProgramAddress(
     [reserve.lendingMarket.toBuffer()], // which account should be authority
     LENDING_PROGRAM_ID,
   );
 
-  const fromAccount = ensureSplAccount(
+  const sourceLiquidityAccount = ensureSplAccount(
     instructions,
     cleanupInstructions,
     from,
@@ -65,27 +72,27 @@ export const deposit = async (
   const transferAuthority = approve(
     instructions,
     cleanupInstructions,
-    fromAccount,
+    sourceLiquidityAccount,
     wallet.publicKey,
     amountLamports,
   );
 
   signers.push(transferAuthority);
 
-  let toAccount: PublicKey;
+  let destinationCollateralAccount: PublicKey;
   if (isInitalized) {
     // get destination account
-    toAccount = await findOrCreateAccountByMint(
+    destinationCollateralAccount = await findOrCreateAccountByMint(
       wallet.publicKey,
       wallet.publicKey,
       instructions,
       cleanupInstructions,
       accountRentExempt,
-      reserve.collateralMint,
+      reserve.collateral.mint,
       signers,
     );
   } else {
-    toAccount = createUninitializedAccount(
+    destinationCollateralAccount = createUninitializedAccount(
       instructions,
       wallet.publicKey,
       accountRentExempt,
@@ -94,40 +101,42 @@ export const deposit = async (
   }
 
   if (isInitalized) {
-    instructions.push(accrueInterestInstruction(reserveAddress));
+    // @FIXME: aggregator needed
+    instructions.push(refreshReserveInstruction(reserveAddress));
 
     // deposit
     instructions.push(
-      depositInstruction(
+      depositReserveLiquidityInstruction(
         amountLamports,
-        fromAccount,
-        toAccount,
-        reserve.lendingMarket,
-        authority,
-        transferAuthority.publicKey,
+        sourceLiquidityAccount,
+        destinationCollateralAccount,
         reserveAddress,
-        reserve.liquiditySupply,
-        reserve.collateralMint,
+        reserve.liquidity.supply,
+        reserve.collateral.mint,
+        reserve.lendingMarket,
+        lendingMarketAuthority,
+        transferAuthority.publicKey,
       ),
     );
   } else {
     // TODO: finish reserve init
+    // @FIXME
     const MAX_UTILIZATION_RATE = 80;
     instructions.push(
       initReserveInstruction(
         amountLamports,
         MAX_UTILIZATION_RATE,
-        fromAccount,
-        toAccount,
+        sourceLiquidityAccount,
+        destinationCollateralAccount,
         reserveAddress,
-        reserve.liquidityMint,
-        reserve.liquiditySupply,
-        reserve.collateralMint,
-        reserve.collateralSupply,
+        reserve.liquidity.mint,
+        reserve.liquidity.supply,
+        reserve.collateral.mint,
+        reserve.collateral.supply,
         reserve.lendingMarket,
-        authority,
+        lendingMarketAuthority,
         transferAuthority.publicKey,
-        reserve.dexMarket,
+        reserve.aggregator,
       ),
     );
   }

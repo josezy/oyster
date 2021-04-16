@@ -1,24 +1,25 @@
+import { ActionConfirmation, ConnectButton, contexts } from '@oyster/common';
+import { PublicKey } from '@solana/web3.js';
+import { Card, Slider } from 'antd';
 import React, { useCallback, useState } from 'react';
+import { redeemReserveCollateral } from '../../actions';
+import { LABELS, marks } from '../../constants';
 import {
   InputType,
-  useUserCollateralBalance,
   useSliderInput,
   useUserBalance,
+  useUserCollateralBalance,
 } from '../../hooks';
-import { LendingReserve } from '../../models/lending';
-import { Card, Slider } from 'antd';
-import { withdraw } from '../../actions';
-import { PublicKey } from '@solana/web3.js';
-import './style.less';
-import { LABELS, marks } from '../../constants';
+import { Reserve } from '../../models';
 import CollateralInput from '../CollateralInput';
-import { contexts, ConnectButton, ActionConfirmation } from '@oyster/common';
+import './style.less';
+
 const { useConnection } = contexts.Connection;
 const { useWallet } = contexts.Wallet;
 
 export const WithdrawInput = (props: {
   className?: string;
-  reserve: LendingReserve;
+  reserve: Reserve;
   address: PublicKey;
 }) => {
   const connection = useConnection();
@@ -32,7 +33,7 @@ export const WithdrawInput = (props: {
   const {
     balanceLamports: collateralBalanceLamports,
     accounts: fromAccounts,
-  } = useUserBalance(reserve?.collateralMint);
+  } = useUserBalance(reserve?.collateral.mint);
   const { balance: collateralBalanceInLiquidity } = useUserCollateralBalance(
     reserve,
   );
@@ -64,7 +65,7 @@ export const WithdrawInput = (props: {
               ),
           collateralBalanceLamports,
         );
-        await withdraw(
+        await redeemReserveCollateral(
           fromAccounts[0],
           withdrawAmount,
           reserve,
